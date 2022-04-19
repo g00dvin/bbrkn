@@ -1,0 +1,47 @@
+#!/bin/bash
+set -e
+set -u
+
+gateway="10.88.1.1"
+workdir="/var/local/rkn"
+orig_list="/home/goodvin/github/bbrkn/fqdn.list"
+
+cd "${workdir}"
+
+
+if [[ -z "$(wget -q --no-cache https://raw.githubusercontent.com/g00dvin/bbrkn/master/fqdn.list)" ]]
+  then
+    cp "${orig_list}" fqdn.list
+fi
+
+while read -r domain
+do
+   for i in $(dig a -4 +short "${domain}")
+   do
+     if [[ ( -n "${i}" ) && ( "${i}" != "0.0.0.0") ]]
+     then
+       if [[ "${i}" =~ [[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+\.[[:digit:]] ]]
+        then 
+          echo "${i}" >> ip.list
+	else 
+	  echo "${i}" >> fqdn.list
+	fi
+      fi
+    done
+done < fqdn.list
+
+
+sort < ip.list | uniq > sorted_ip.list
+
+if [[ "$(ip route flush via "${gateway}" protocol static)" ]]
+  then
+    echo "Failed flush route. Exiting."
+    exit 1
+fi
+
+while read -r ip_to_route
+do 
+  ip route add "${ip_to_route}" via "${gateway}" protocol static
+done < sorted_ip.list
+
+rm ip.list sorted_ip.list fqdn.list
